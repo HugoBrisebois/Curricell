@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.2.11415.280 d18.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Curricell", "Curricell.csproj", "{401D16A6-81FC-FBFD-01F7-49C82ED21919}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{401D16A6-81FC-FBFD-01F7-49C82ED21919}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{401D16A6-81FC-FBFD-01F7-49C82ED21919}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{401D16A6-81FC-FBFD-01F7-49C82ED21919}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{401D16A6-81FC-FBFD-01F7-49C82ED21919}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8A58AF94-4B5E-4AAC-9CEB-502A338C8D5E}
+	EndGlobalSection
+EndGlobal
