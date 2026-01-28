@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.VisualBasic;
 
 public class Program
 {
     public static void Main()
     {
         Console.WriteLine("Hello, World!\n");
+        string userName = Console.ReadLine() ?? string.Empty;
 
         Concept();
     }
@@ -29,13 +31,19 @@ public class Program
 
         Dictionary<int, string> Concepts = new Dictionary<int, string>();
 
-        Concepts.Add(1, "percentage");
+        Concepts.Add(1, "Percentage");
+        Concepts.Add(2, "Matter");
+        foreach (var item1 in Concepts)
+        {
+            Console.WriteLine($"{item1}\n");
+        }
 
+        Dictionary<int, string> Links = new Dictionary<int, string>();
     }
 
     public static void ConceptEngine()
     {
-
+        
     }
     
 }  
