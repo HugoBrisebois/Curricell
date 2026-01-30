@@ -39,7 +39,7 @@ public class Program
                 using (SQLiteCommand Mycommand = new SQLiteCommand(SQLQueryCreateTable, MyConnection))
                 {
                     var RowsChanged = Mycommand.ExecuteNonQuery(); // execute create the table sql query
-                    Console.WriteLine($"No o Rows Changes = {RowsChanged}"); // rows changed equals 0, since we are only creating a table
+                    Console.WriteLine($"No o Rows Changes for concepts table = {RowsChanged}"); // rows changed equals 0, since we are only creating a table
                 }
 
                 // Execute the second table creation query
@@ -64,6 +64,7 @@ public class Program
         // defining what is a concept
         // function to add concepts/ topics
 
+        
         
 
     }
