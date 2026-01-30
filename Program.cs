@@ -64,7 +64,10 @@ public class Program
         // defining what is a concept
         // function to add concepts/ topics
 
-        
+        using(SQLiteCommand addItem = new SQLiteCommand())
+        {
+            
+        }
         
 
     }
