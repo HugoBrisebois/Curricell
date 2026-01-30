@@ -17,11 +17,16 @@ public class Program
         string connectionString = "Data Source=Curricel.db;version=3;FailIfMissing = True";
       
        // defining the tables
-       String SQLQueryCreateTable = @"CREATE TABLE IF NOT EXISTS Concepts(Id    INTEGER PRIMARY KEY, 
-        Concept VARCHAR,
-        Name TEXT NOT NULL,
-        Description TEXT
-        )";
+    String SQLQueryCreateTable = @"CREATE TABLE IF NOT EXISTS Concepts(Id    INTEGER PRIMARY KEY, 
+    Concept VARCHAR,
+    Name TEXT NOT NULL,
+    Description TEXT
+    )";
+    
+    String SQLQueryCreateTable2 = @"CREATE TABLE IF NOT EXISTS topics(Id INTEGER PRIMARY KEY,
+    Topic VARCHAR,
+    Description TEXT
+    )";
       
         try
         {
@@ -30,17 +35,19 @@ public class Program
             {
                 MyConnection.Open(); // open a connection to database  
 
-                // Drop the old Customers table if it exists
-                using (SQLiteCommand dropCommand = new SQLiteCommand("DROP TABLE IF EXISTS Customers;", MyConnection))
-                {
-                    dropCommand.ExecuteNonQuery();
-                }
 
                 using (SQLiteCommand Mycommand = new SQLiteCommand(SQLQueryCreateTable, MyConnection))
                 {
                     var RowsChanged = Mycommand.ExecuteNonQuery(); // execute create the table sql query
                     Console.WriteLine($"No o Rows Changes = {RowsChanged}"); // rows changed equals 0, since we are only creating a table
-                } 
+                }
+
+                // Execute the second table creation query
+                using (SQLiteCommand Mycommand2 = new SQLiteCommand(SQLQueryCreateTable2, MyConnection))
+                {
+                    var RowsChanged2 = Mycommand2.ExecuteNonQuery();
+                    Console.WriteLine($"No o Rows Changes for topics table = {RowsChanged2}");
+                }
             } 
         }
         catch(Exception Ex)
