@@ -54,8 +54,10 @@ public class Program
 
     public static void Concept()
     {
-        // Defining what a concept is
-        // also using a SQlite database to store all the concepts/topics as nodes like in a graph database
+        // defining what is a concept
+        // function to add concepts/ topics
+
+        
 
     }
 
