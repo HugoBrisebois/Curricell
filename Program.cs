@@ -55,19 +55,43 @@ public class Program
             Console.WriteLine(Ex.Message);
         }
         Console.WriteLine("Sqlite Connected");
+        
+        
+        string insertSql = "INSERT INTO topics (topic, description) VALUES (@Topic, @Description)";
+       
+        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        {
+            SQLiteCommand insertCommand = new SQLiteCommand(insertSql, connection); 
+
+            // Parameters
+            insertCommand.Parameters.AddWithValue("@Topic", "math");
+            insertCommand.Parameters.AddWithValue("@Description", "the language of the universe");
+
+            try
+            {
+                connection.Open();
+                insertCommand.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            finally
+            {
+                connection.Close();
+                Console.WriteLine("topic added");
+            }
+        }
     }
 
 
 
-    public static void Concept()
+    public static void Concept(SQLiteConnection connection)
     {
         // defining what is a concept
         // function to add concepts/ topics
 
-        using(SQLiteCommand addItem = new SQLiteCommand())
-        {
-            
-        }
+        
         
 
     }
