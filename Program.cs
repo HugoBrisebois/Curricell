@@ -5,6 +5,7 @@ using System.Data.SQLite;
 using System.Data.SqlTypes;
 using System.Data;
 using System.Threading.Channels;
+using System.Net.Http.Headers;
 
 
 
@@ -167,7 +168,75 @@ public class Program
     }
 
     // add multiple topics
-    public static void AddMultipleTopics
+    public static void AddMultipleTopics(List<(string topic, string description)> topics)
+    {
+        foreach (var item in topics)
+        {
+            AddTopic(item.topic, item.description);
+        }
+    }
+
+    // add multiple concepts
+    public static void AddMultipleConcepts(List<(string concept, string name, string description)> concepts)
+    {
+        foreach (var item in concepts)
+        {
+            AddConcept(item.concept, item.name, item.description);
+        }
+    }
+
+
+    // query methods
+    public static List<(int Id, string Topic, string Description)> GetAllTopics()
+    {
+        var topics = new List<(int, string, string)>();
+        string querySql = "SELECT Id, Topic, Description FROM topics";
+
+        using (SQLiteConnection connection = new SQLiteConnection(connectingString))
+        {
+            connection.Open();
+            using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
+            using (SQLiteDataReader reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    topics.Add((
+                        reader.GetInt32(0),
+                        reader.IsDBNull(1) ? "" : reader.GetString(1),
+                        reader.IsDBNull(2) ? "" : reader.GetString(2)
+                    ));
+                }
+            }
+        }
+        return topics;
+    }
+
+    // Get all concepts from database
+    public static List<(int Id, string Concept, string Name, string Description)> GetAllConcepts()
+    {
+        var concepts = new List<(int, string, string, string)>();
+        string querySql = "SELECT Id, Concept, Name, Description FROM Concepts";
+
+        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        {
+            connection.Open();
+            using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
+            using (SQLiteDataReader reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    concepts.Add((
+                        reader.GetInt32(0),
+                        reader.IsDBNull(1) ? "" : reader.GetString(1),
+                        reader.IsDBNull(2) ? "" : reader.GetString(2),
+                        reader.IsDBNull(3) ? "" : reader.GetString(3)
+                    ));
+                }
+            }
+        }
+        
+        return concepts;
+    }
 
     public static void Concept(SQLiteConnection connection)
     {
