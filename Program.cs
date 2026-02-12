@@ -234,9 +234,186 @@ public class Program
                 }
             }
         }
-        
+
         return concepts;
     }
+
+    // get concepts by a specific topic/category
+    public static List<(int Id, string Name, string Description)> GetConceptsByConcept(string concept)
+    {
+        var concepts = new List<(int, string, string)>();
+        string querySql = "SELECT Id, Name, Description FROM Concepts WHERE Concept = @Concept";
+
+       using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        {
+            connection.Open();
+            using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
+            {
+                command.Parameters.AddWithValue("@Concept", concept);
+                using (SQLiteDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        concepts.Add((
+                            reader.GetInt32(0),
+                            reader.IsDBNull(1) ? "" : reader.GetString(1),
+                            reader.IsDBNull(2) ? "" : reader.GetString(2)
+                        ));
+                    }
+                }
+            }
+        }
+
+        return concepts;
+    }
+
+    // search concepts by name
+ public static List<(int Id, string Concept, string Name, string Description)> SearchConcepts(string searchTerm)
+    {
+        var concepts = new List<(int, string, string, string)>();
+        string querySql = "SELECT Id, Concept, Name, Description FROM Concepts WHERE Name LIKE @SearchTerm";
+
+        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        {
+            connection.Open();
+            using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
+            {
+                command.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+                using (SQLiteDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        concepts.Add((
+                            reader.GetInt32(0),
+                            reader.IsDBNull(1) ? "" : reader.GetString(1),
+                            reader.IsDBNull(2) ? "" : reader.GetString(2),
+                            reader.IsDBNull(3) ? "" : reader.GetString(3)
+                        ));
+                    }
+                }
+            }
+        }
+
+        return concepts;
+    }
+
+    // get a specific topic by ID
+    public static (int Id, string Topic, string Description)? GetTopicById(int id)
+    {
+        string querySql = "SELECT Id, Topic, Description FROM topics WHERE Id = @Id";
+
+        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        {
+            connection.Open();
+            using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
+            {
+                command.Parameters.AddWithValue("@Id", id);
+                using (SQLiteDataReader reader = command.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        return (
+                            reader.GetInt32(0),
+                            reader.IsDBNull(1) ? "" : reader.GetString(1),
+                            reader.IsDBNull(2) ? "" : reader.GetString(2)
+                        );
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // get a specific concept by ID
+     public static (int Id, string Concept, string Name, string Description)? GetConceptById(int id)
+    {
+        string querySql = "SELECT Id, Concept, Name, Description FROM Concepts WHERE Id = @Id";
+
+        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        {
+            connection.Open();
+            using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
+            {
+                command.Parameters.AddWithValue("@Id", id);
+                using (SQLiteDataReader reader = command.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        return (
+                            reader.GetInt32(0),
+                            reader.IsDBNull(1) ? "" : reader.GetString(1),
+                            reader.IsDBNull(2) ? "" : reader.GetString(2),
+                            reader.IsDBNull(3) ? "" : reader.GetString(3)
+                        );
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // update a topic
+    public static bool UpdateTopic(int id, string topic, string description)
+    {
+        string updateSql = "UPDATE topics SET Topic = @Topic, Description = @Description WHERE Id = @Id";
+
+        try
+        {
+            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+                using (SQLiteCommand command = new SQLiteCommand(updateSql, connection))
+                {
+                    command.Parameters.AddWithValue("@Topic", topic);
+                    command.Parameters.AddWithValue("@Description", description);
+                    command.Parameters.AddWithValue("@Id", id);
+                    return command.ExecuteNonQuery() > 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating topic: {ex.Message}");
+            return false;
+        }
+    }
+
+
+    // update a concept
+    public static bool UpdateConcept(int id, string concept, string name, string description)
+    {
+        string updateSql = "UPDATE Concepts SET Concept = @Concept, Name = @Name, Description = @Description WHERE Id = @Id";
+
+        try
+        {
+            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+                using (SQLiteCommand command = new SQLiteCommand(updateSql, connection))
+                {
+                    command.Parameters.AddWithValue("@Concept", concept);
+                    command.Parameters.AddWithValue("@Name", name);
+                    command.Parameters.AddWithValue("@Description", description);
+                    command.Parameters.AddWithValue("@Id", id);
+                    return command.ExecuteNonQuery() > 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating concept: {ex.Message}");
+            return false;
+        }
+    }
+
+
+    // Delete methods
+
+
+    // delete a topic
+    
 
     public static void Concept(SQLiteConnection connection)
     {
