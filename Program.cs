@@ -11,10 +11,11 @@ using System.Net.Http.Headers;
 
 public class Program
 {
-        private static string connectionString = "Data Source=Curricel.db;version=3;FailIfMissing = True";
+    private static string connectionString = "Data Source=Curricel.db;version=3;FailIfMissing=False";
+    
     public static void Main()
     {
-       // connect to the database
+        // connect to the database
         Console.WriteLine("Connecting to database");
         InitializeDatabase();
 
@@ -32,7 +33,7 @@ public class Program
         AddConcept("Science", "Atomic Theory", "Study of the universe and matter");
 
         // Add multiple items at once
-        AddMultipleTopics(new List<string, string>
+        AddMultipleTopics(new List<(string, string)>  
         {
             ("English", "Language and literature"),
             ("Programming", "Computer Science")   
@@ -41,7 +42,7 @@ public class Program
         // Add multiple concepts
         AddMultipleConcepts(new List<(string, string, string)>
         {
-           ("Math", "Geometry", "Stufy of shapes"),
+           ("Math", "Geometry", "Study of shapes"),  
            ("Programming", "Variables", "Store data values")
         });
 
@@ -56,33 +57,30 @@ public class Program
         var mathConcepts = GetConceptsByConcept("Math");
         foreach (var concept in mathConcepts)
         {
-            Console.WriteLine($" - {concept.name}: {concept.Description}");
+            Console.WriteLine($" - {concept.Name}: {concept.Description}");  
         }
 
         // search concepts
-        Console.Writeline("\n==== Search 'study' ====");
+        Console.WriteLine("\n==== Search 'study' ====");  
         var searchResults = SearchConcepts("study");
         foreach (var result in searchResults) 
         {
-            Console.WriteLine($" - {resut.Name} ({result.Concept})");
+            Console.WriteLine($" - {result.Name} ({result.Concept})");
         }
 
         // usage of custom functions
+        
 
-        Concept();
-        ConceptEngine();
-
-        Console.Writeine("\nPress any key to exit...");
+        Console.WriteLine("\nPress any key to exit...");  
         Console.ReadKey();
     }
 
     public static void InitializeDatabase() 
     {
-        Console.Writeline("Initializing database...");
-
+        Console.WriteLine("Initializing database...");
 
         // adding tables
-       string createConceptsTable = @"CREATE TABLE IF NOT EXISTS Concepts(
+        string createConceptsTable = @"CREATE TABLE IF NOT EXISTS Concepts(
             Id INTEGER PRIMARY KEY AUTOINCREMENT, 
             Concept VARCHAR,
             Name TEXT NOT NULL,
@@ -129,16 +127,20 @@ public class Program
         {
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
-                command.Parameters.AddWithValue("@Topic", topic);
-                command.Parameters.AddWithValue("@Description", description);
-                command.ExecuteNonQuery();
-                Console.WriteLine($" Topic '{topic}' added");
-                return true;
+                connection.Open();
+                using (SQLiteCommand command = new SQLiteCommand(insertSql, connection))
+                {
+                    command.Parameters.AddWithValue("@Topic", topic);
+                    command.Parameters.AddWithValue("@Description", description);
+                    command.ExecuteNonQuery();
+                    Console.WriteLine($"✓ Topic '{topic}' added");
+                    return true;
+                }
             }
         }
-        catch (Exeception ex) 
+        catch (Exception ex) 
         {
-            Console.Writeline($"Error adding topic: {ex.Message}");
+            Console.WriteLine($"Error adding topic: {ex.Message}");
             return false;
         }
     }
@@ -152,15 +154,19 @@ public class Program
         {
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
-                command.Parameters.AddWithValue("@Concept", concept);
-                command.Parameters.AddWithValue("@Name", name);
-                command.Parameters.AddWithValue("@Description", description);
-                command.ExecuteNonQuery();
-                Console.WriteLine($" Concept '{name}' added to {concept}");
-                return true
+                connection.Open();
+                using (SQLiteCommand command = new SQLiteCommand(insertSql, connection))
+                {
+                    command.Parameters.AddWithValue("@Concept", concept);
+                    command.Parameters.AddWithValue("@Name", name);
+                    command.Parameters.AddWithValue("@Description", description);
+                    command.ExecuteNonQuery();
+                    Console.WriteLine($"✓ Concept '{name}' added to {concept}");
+                    return true;
+                }
             }
         }
-         catch (Exception ex)
+        catch (Exception ex)
         {
             Console.WriteLine($"Error adding concept: {ex.Message}");
             return false;
@@ -192,7 +198,7 @@ public class Program
         var topics = new List<(int, string, string)>();
         string querySql = "SELECT Id, Topic, Description FROM topics";
 
-        using (SQLiteConnection connection = new SQLiteConnection(connectingString))
+        using (SQLiteConnection connection = new SQLiteConnection(connectionString)) 
         {
             connection.Open();
             using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
@@ -244,7 +250,7 @@ public class Program
         var concepts = new List<(int, string, string)>();
         string querySql = "SELECT Id, Name, Description FROM Concepts WHERE Concept = @Concept";
 
-       using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
         {
             connection.Open();
             using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
@@ -268,7 +274,7 @@ public class Program
     }
 
     // search concepts by name
- public static List<(int Id, string Concept, string Name, string Description)> SearchConcepts(string searchTerm)
+    public static List<(int Id, string Concept, string Name, string Description)> SearchConcepts(string searchTerm)
     {
         var concepts = new List<(int, string, string, string)>();
         string querySql = "SELECT Id, Concept, Name, Description FROM Concepts WHERE Name LIKE @SearchTerm";
@@ -326,7 +332,7 @@ public class Program
     }
 
     // get a specific concept by ID
-     public static (int Id, string Concept, string Name, string Description)? GetConceptById(int id)
+    public static (int Id, string Concept, string Name, string Description)? GetConceptById(int id)
     {
         string querySql = "SELECT Id, Concept, Name, Description FROM Concepts WHERE Id = @Id";
 
@@ -413,22 +419,82 @@ public class Program
 
 
     // delete a topic
-    
-
-    public static void Concept(SQLiteConnection connection)
+    public static bool DeleteTopic(int id)
     {
-        // defining what is a concept
-        // function to add concepts/ topics
-
-
-        
-        
-
+        string deleteSql = "DELETE FROM topics WHERE Id = @Id";
+        try
+        {
+            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+                using (SQLiteCommand command = new SQLiteCommand(deleteSql, connection))
+                {
+                    command.Parameters.AddWithValue("@Id", id);
+                    return command.ExecuteNonQuery() > 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting topic: {ex.Message}");
+            return false;
+        }    
     }
 
-    public static void ConceptEngine()
+
+    // Delete a concept
+    public static bool DeleteConcept(int id)
     {
-        
+        string deleteSql = "DELETE FROM Concepts WHERE Id = @Id";
+
+        try
+        {
+            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+                using (SQLiteCommand command = new SQLiteCommand(deleteSql, connection))
+                {
+                    command.Parameters.AddWithValue("@Id", id);
+                    return command.ExecuteNonQuery() > 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting concept: {ex.Message}");
+            return false;
+        }
     }
+
+
+    // Display Helper methods 
+
+    // Display all topics in a formatted way
+    public static void DisplayAllTopics()
+    {
+        var topics = GetAllTopics();
+        Console.WriteLine("\n===== ALL TOPICS =====");  
+        foreach (var topic in topics)
+        {
+            Console.WriteLine($"[{topic.Id}] {topic.Topic}: {topic.Description}");
+        }
+        Console.WriteLine();
+    }
+
+    // Display all concepts in a formatted way
+    public static void DisplayAllConcepts()
+    {
+        var concepts = GetAllConcepts();
+        Console.WriteLine("\n===== ALL CONCEPTS ====="); 
+        foreach (var concept in concepts)
+        {
+            Console.WriteLine($"[{concept.Id}] {concept.Name} ({concept.Concept}): {concept.Description}");
+        }
+        Console.WriteLine();
+    }
+
+
+
+    // 
     
 }
