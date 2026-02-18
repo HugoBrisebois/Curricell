@@ -6,6 +6,7 @@ using System.Data.SqlTypes;
 using System.Data;
 using System.Threading.Channels;
 using System.Net.Http.Headers;
+using OpenCvSharp;
 
 
 
@@ -495,6 +496,17 @@ public class Program
 
 
 
-    // 
+    // All Functions for Computer vision features & text extraction 
+    public static void ExtractText()
+    {
+        // Path to images
+        string imagePath = "";
+        
+        //load image
+        Mat inputImage = Cv2.ImRead(imagePath, ImreadModes.Color);
+        if ()
+    }
+    
+    
     
 }
