@@ -6,8 +6,8 @@ using System.Data.SqlTypes;
 using System.Data;
 using System.Threading.Channels;
 using System.Net.Http.Headers;
-using OpenCvSharp;
 using IronOcr;
+using IronSoftware.Drawing;
 
 
 public class Program
@@ -451,32 +451,26 @@ public class Program
     // All Functions for Computer vision features & text extraction 
     public static void ExtractText()
     {
-        // Path to images
+        // Path to image
         string imagePath = "images/Curricel.png";
-        
-        //load image
-        Mat inputImage = Cv2.ImRead(imagePath, ImreadModes.Color);
-        if (inputImage.Empty())
+    
+        // Set up the OCR
+        var OCR = new IronTesseract();
+    
+        using (var input = new OcrInput())
         {
-            Console.WriteLine("Failed to load the image, Check the file path.");
-            return;
+            // Load image from path
+            input.LoadImage(imagePath);
+        
+            // Perform OCR on the image
+            var ocrResult = OCR.Read(input);
+        
+            // Store the recognized text in a string
+            string extractedText = ocrResult.Text;
+        
+            // Print the recognized text
+            Console.WriteLine(extractedText);
         }
-        
-        Console.WriteLine("Image loaded successfully");
-        
-        // convert to greyscale
-        Mat greyImage = new Mat();
-        Cv2.CvtColor(inputImage, greyImage,ColorConversionCodes.BGR2GRAY);
-        Console.WriteLine("Image converted to grayscale");
-        
-        // display both images (original and grayscale)
-        Cv2.ImShow("Original Image", inputImage);
-        Cv2.ImShow("GreyScale Image", greyImage);
-        
-        // wait for a key pass before closing the image display
-        Console.WriteLine("Press any key to close the image windows");
-        Cv2.WaitKey();
-        Cv2.DestroyAllWindows();
     }
     
     
