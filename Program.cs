@@ -7,6 +7,7 @@ using System.Data;
 using System.Threading.Channels;
 using System.Net.Http.Headers;
 using OpenCvSharp;
+using IronOcr;
 
 
 
@@ -20,57 +21,9 @@ public class Program
         Console.WriteLine("Connecting to database");
         InitializeDatabase();
 
-        // Add Data
-        Console.WriteLine("\n==== Adding Data ====");
-
-        // Add topics
-        AddTopic("math", "the language of the universe");
-        AddTopic("Science", "Understanding the natural world");
-        AddTopic("History", "Learning from the past");
-      
-        // add concepts
-        AddConcept("Math", "Algebra", "Branch of math using symbols and variables");
-        AddConcept("Math", "Percentage", "the way of interests and what the world runs on");
-        AddConcept("Science", "Atomic Theory", "Study of the universe and matter");
-
-        // Add multiple items at once
-        AddMultipleTopics(new List<(string, string)>  
-        {
-            ("English", "Language and literature"),
-            ("Programming", "Computer Science")   
-        });
-
-        // Add multiple concepts
-        AddMultipleConcepts(new List<(string, string, string)>
-        {
-           ("Math", "Geometry", "Study of shapes"),  
-           ("Programming", "Variables", "Store data values")
-        });
-
-        // Display all topics
-        DisplayAllTopics();
-
-        // Display all concepts
-        DisplayAllConcepts();
-
-        // Get Specific topic's concepts
-        Console.WriteLine("\n==== Math Concepts ====");
-        var mathConcepts = GetConceptsByConcept("Math");
-        foreach (var concept in mathConcepts)
-        {
-            Console.WriteLine($" - {concept.Name}: {concept.Description}");  
-        }
-
-        // search concepts
-        Console.WriteLine("\n==== Search 'study' ====");  
-        var searchResults = SearchConcepts("study");
-        foreach (var result in searchResults) 
-        {
-            Console.WriteLine($" - {result.Name} ({result.Concept})");
-        }
-
-        // usage of custom functions
         
+        
+        ExtractText();
 
         Console.WriteLine("\nPress any key to exit...");  
         Console.ReadKey();
@@ -500,11 +453,31 @@ public class Program
     public static void ExtractText()
     {
         // Path to images
-        string imagePath = "";
+        string imagePath = "images/Curricel.png";
         
         //load image
         Mat inputImage = Cv2.ImRead(imagePath, ImreadModes.Color);
-        if ()
+        if (inputImage.Empty())
+        {
+            Console.WriteLine("Failed to load the image, Check the file path.");
+            return;
+        }
+        
+        Console.WriteLine("Image loaded successfully");
+        
+        // convert to greyscale
+        Mat greyImage = new Mat();
+        Cv2.CvtColor(inputImage, greyImage,ColorConversionCodes.BGR2GRAY);
+        Console.WriteLine("Image converted to grayscale");
+        
+        // display both images (original and grayscale)
+        Cv2.ImShow("Original Image", inputImage);
+        Cv2.ImShow("GreyScale Image", greyImage);
+        
+        // wait for a key pass before closing the image display
+        Console.WriteLine("Press any key to close the image windows");
+        Cv2.WaitKey();
+        Cv2.DestroyAllWindows();
     }
     
     
