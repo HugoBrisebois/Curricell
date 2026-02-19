@@ -6,8 +6,7 @@ using System.Data.SqlTypes;
 using System.Data;
 using System.Threading.Channels;
 using System.Net.Http.Headers;
-using IronOcr;
-using IronSoftware.Drawing;
+using OpenCvSharp;
 
 
 public class Program
@@ -454,22 +453,14 @@ public class Program
         // Path to image
         string imagePath = "images/Curricel.png";
     
-        // Set up the OCR
-        var OCR = new IronTesseract();
-    
-        using (var input = new OcrInput())
+        // lod the preprocess image with OpenCV
+        using (var src = Cv2.ImRead(imagePath, ImreadModes.Color))
+        using (var gray = new Mat()) 
+        using (var thresh = new Mat())
         {
-            // Load image from path
-            input.LoadImage(imagePath);
-        
-            // Perform OCR on the image
-            var ocrResult = OCR.Read(input);
-        
-            // Store the recognized text in a string
-            string extractedText = ocrResult.Text;
-        
-            // Print the recognized text
-            Console.WriteLine(extractedText);
+            // convert to grayscale
+            Cv2.CvtColor(src, gray, ColorConversionCodes.BayerBG2BGR);
+            // Apply threshhold to clean up the image for better OCR
         }
     }
     
