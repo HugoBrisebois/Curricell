@@ -10,7 +10,6 @@ using OpenCvSharp;
 using IronOcr;
 
 
-
 public class Program
 {
     private static string connectionString = "Data Source=Curricel.db;version=3;FailIfMissing=False";
