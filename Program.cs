@@ -1,17 +1,12 @@
-﻿using System;
-using System.Security.Cryptography.X509Certificates;
-using Microsoft.VisualBasic;
+﻿#pragma warning disable CS1066
 using System.Data.SQLite;
-using System.Data.SqlTypes;
-using System.Data;
-using System.Threading.Channels;
-using System.Net.Http.Headers;
 using OpenCvSharp;
+using Tesseract;
 
 
 public class Program
 {
-    private static string connectionString = "Data Source=Curricel.db;version=3;FailIfMissing=False";
+    private static string _connectionString = "Data Source=Curricel.db;version=3;FailIfMissing=False";
     
     public static void Main()
     {
@@ -19,9 +14,18 @@ public class Program
         Console.WriteLine("Connecting to database");
         InitializeDatabase();
 
+        // Use an Absolute path or relaitve path to the image
+        string imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images", "Curricel.png");
+
+        if (!File.Exists(imagePath))
+        {
+            Console.WriteLine($"Image not found at : {imagePath}");
+            Console.WriteLine("\nPress any key to exit");
+            Console.ReadKey();
+            return;
+        }
         
-        
-        ExtractText();
+        ExtractText(imagePath);
 
         Console.WriteLine("\nPress any key to exit...");  
         Console.ReadKey();
@@ -48,7 +52,7 @@ public class Program
         // connecting to database
         try
         {
-            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
 
@@ -77,7 +81,7 @@ public class Program
 
         try
         {
-            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
                 using (SQLiteCommand command = new SQLiteCommand(insertSql, connection))
@@ -104,7 +108,7 @@ public class Program
 
         try 
         {
-            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
                 using (SQLiteCommand command = new SQLiteCommand(insertSql, connection))
@@ -150,7 +154,7 @@ public class Program
         var topics = new List<(int, string, string)>();
         string querySql = "SELECT Id, Topic, Description FROM topics";
 
-        using (SQLiteConnection connection = new SQLiteConnection(connectionString)) 
+        using (SQLiteConnection connection = new SQLiteConnection(_connectionString)) 
         {
             connection.Open();
             using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
@@ -175,7 +179,7 @@ public class Program
         var concepts = new List<(int, string, string, string)>();
         string querySql = "SELECT Id, Concept, Name, Description FROM Concepts";
 
-        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
         {
             connection.Open();
             using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
@@ -202,7 +206,7 @@ public class Program
         var concepts = new List<(int, string, string)>();
         string querySql = "SELECT Id, Name, Description FROM Concepts WHERE Concept = @Concept";
 
-        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
         {
             connection.Open();
             using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
@@ -231,7 +235,7 @@ public class Program
         var concepts = new List<(int, string, string, string)>();
         string querySql = "SELECT Id, Concept, Name, Description FROM Concepts WHERE Name LIKE @SearchTerm";
 
-        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
         {
             connection.Open();
             using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
@@ -260,7 +264,7 @@ public class Program
     {
         string querySql = "SELECT Id, Topic, Description FROM topics WHERE Id = @Id";
 
-        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
         {
             connection.Open();
             using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
@@ -288,7 +292,7 @@ public class Program
     {
         string querySql = "SELECT Id, Concept, Name, Description FROM Concepts WHERE Id = @Id";
 
-        using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+        using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
         {
             connection.Open();
             using (SQLiteCommand command = new SQLiteCommand(querySql, connection))
@@ -319,7 +323,7 @@ public class Program
 
         try
         {
-            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
                 using (SQLiteCommand command = new SQLiteCommand(updateSql, connection))
@@ -346,7 +350,7 @@ public class Program
 
         try
         {
-            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
                 using (SQLiteCommand command = new SQLiteCommand(updateSql, connection))
@@ -376,7 +380,7 @@ public class Program
         string deleteSql = "DELETE FROM topics WHERE Id = @Id";
         try
         {
-            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
                 using (SQLiteCommand command = new SQLiteCommand(deleteSql, connection))
@@ -401,7 +405,7 @@ public class Program
 
         try
         {
-            using (SQLiteConnection connection = new SQLiteConnection(connectionString))
+            using (SQLiteConnection connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
                 using (SQLiteCommand command = new SQLiteCommand(deleteSql, connection))
@@ -448,22 +452,63 @@ public class Program
 
 
     // All Functions for Computer vision features & text extraction 
-    public static void ExtractText()
+    public static string ExtractText(string imagePath)
     {
-        // Path to image
-        string imagePath = "images/Curricel.png";
+        string tempPath = Path.Combine(Path.GetTempPath(), "curricel_temp.png");
     
-        // lod the preprocess image with OpenCV
-        using (var src = Cv2.ImRead(imagePath, ImreadModes.Color))
-        using (var gray = new Mat()) 
-        using (var thresh = new Mat())
+        try
         {
-            // convert to grayscale
-            Cv2.CvtColor(src, gray, ColorConversionCodes.BayerBG2BGR);
-            // Apply threshhold to clean up the image for better OCR
+            using (var src = Cv2.ImRead(imagePath, ImreadModes.Color))
+            using (var gray = new Mat())
+            using (var inverted = new Mat())
+            using (var contrast = new Mat())
+            using (var thresh = new Mat())
+            {
+                // Step 1 - Convert to grayscale
+                Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+    
+                // Step 2 - Invert the image (dark text on black → light text on white)
+                Cv2.BitwiseNot(gray, inverted);
+    
+                // Step 3 - Boost contrast with CLAHE
+                var clahe = Cv2.CreateCLAHE(clipLimit: 4.0, tileGridSize: new Size(8, 8));
+                clahe.Apply(inverted, contrast);
+    
+                // Step 4 - Adaptive threshold to handle uneven backgrounds
+                Cv2.AdaptiveThreshold(contrast, thresh, 255,
+                    AdaptiveThresholdTypes.GaussianC,
+                    ThresholdTypes.Binary,
+                    blockSize: 31,
+                    c: -10);
+    
+                // Step 5 - Save to temp file for Tesseract
+                Cv2.ImWrite(tempPath, thresh);
+            }
+    
+            // Run Tesseract on the temp file
+            string tessDataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tessdata");
+    
+            using (var engine = new TesseractEngine(tessDataPath, "eng", EngineMode.Default))
+            using (var img = Pix.LoadFromFile(tempPath))
+            using (var page = engine.Process(img))
+            {
+                string extractedText = page.GetText().Trim();
+                Console.WriteLine($"Extracted: {extractedText}");
+                return extractedText;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during text extraction: {ex.Message}");
+            return string.Empty;
+        }
+        finally
+        {
+            // Always clean up the temp file even if something goes wrong
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
         }
     }
-    
     
     
 }
