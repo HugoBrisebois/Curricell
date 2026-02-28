@@ -10,24 +10,23 @@ public class Program
     
     public static void Main()
     {
-        // connect to the database
         Console.WriteLine("Connecting to database");
         InitializeDatabase();
 
-        // Use an Absolute path or relaitve path to the image
         string imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images", "Curricel.png");
 
         if (!File.Exists(imagePath))
         {
-            Console.WriteLine($"Image not found at : {imagePath}");
-            Console.WriteLine("\nPress any key to exit");
+            Console.WriteLine($"Image not found at: {imagePath}");
             Console.ReadKey();
             return;
         }
-        
+
+        Console.WriteLine($"Image found at: {imagePath}");
+        Console.WriteLine($"Image found at: {imagePath}");
         ExtractText(imagePath);
 
-        Console.WriteLine("\nPress any key to exit...");  
+        Console.WriteLine("\nPress any key to exit...");
         Console.ReadKey();
     }
 
