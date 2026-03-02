@@ -3,6 +3,8 @@ using System.Data.SQLite;
 using OpenCvSharp;
 using Tesseract;
 
+namespace Curricell;
+
 public class Program
 {
     private static string _connectionString = "Data Source=Curricel.db;version=3;FailIfMissing=False";
