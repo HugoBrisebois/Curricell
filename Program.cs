@@ -3,7 +3,6 @@ using System.Data.SQLite;
 using OpenCvSharp;
 using Tesseract;
 
-
 public class Program
 {
     private static string _connectionString = "Data Source=Curricel.db;version=3;FailIfMissing=False";
@@ -507,6 +506,11 @@ public class Program
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }
+    }
+
+    public static void Model()
+    {
+        Console.WriteLine("hello");
     }
     
     
