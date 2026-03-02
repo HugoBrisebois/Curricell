@@ -1,7 +1,7 @@
-﻿#pragma warning disable CS1066
-using System.Data.SQLite;
+﻿using System.Data.SQLite;
 using OpenCvSharp;
 using Tesseract;
+using UglyToad.PdfPig;
 
 namespace Curricell;
 
@@ -24,9 +24,11 @@ public class Program
         }
 
         Console.WriteLine($"Image found at: {imagePath}");
-        Console.WriteLine($"Image found at: {imagePath}");
-        ExtractText(imagePath);
+        
+        ExtractImgText(imagePath);
 
+        
+        
         Console.WriteLine("\nPress any key to exit...");
         Console.ReadKey();
     }
@@ -452,7 +454,7 @@ public class Program
 
 
     // All Functions for Computer vision features & text extraction 
-    public static string ExtractText(string imagePath)
+    public static string ExtractImgText(string imagePath)
     {
         string tempPath = Path.Combine(Path.GetTempPath(), "curricel_temp.png");
     
@@ -510,6 +512,21 @@ public class Program
         }
     }
 
+    public static string ExtractPdfText(string filePath)
+    {
+        if (filePath.EndsWith(".txt"))
+            return File.ReadAllText(filePath);
+
+        if (filePath.EndsWith(".pdf"))
+        {
+            using var pdf = PdfDocument.Open(filePath);
+            return string.Join("\n", pdf.GetPages().Select(p => p.Text));
+        }
+
+        throw new NotSupportedException("Only .txt and .pdf supported");
+    }
+    
+    
     public static void Model()
     {
         Console.WriteLine("hello");
