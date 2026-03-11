@@ -2,12 +2,29 @@
 using OpenCvSharp;
 using Tesseract;
 using UglyToad.PdfPig;
+using System.Text.Json;
+using System.Text;
 
 namespace Curricell;
 
 public class Program
 {
     private static string _connectionString = "Data Source=Curricel.db;version=3;FailIfMissing=False";
+    
+    // folder paths
+    private static readonly string UploadFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "uploads");
+    private static readonly string ProcessedFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "processed");
+    private static readonly string TessDataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tessdata");
+    
+    // hugging face config
+    // free interface API
+    private static readonly string HfApiUrl =
+        "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3";
+
+    private static string HfApiToken = "";
+    
+    
+    
     
     public static void Main()
     {

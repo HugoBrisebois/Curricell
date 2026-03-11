@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <Folder Include="PDf\" />
+    <Folder Include="uploads\" />
   </ItemGroup>
 
 </Project>
