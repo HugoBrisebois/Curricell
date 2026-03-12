@@ -1,4 +1,5 @@
 ﻿using System.Data.SQLite;
+using System.Diagnostics;
 using OpenCvSharp;
 using Tesseract;
 using UglyToad.PdfPig;
@@ -24,14 +25,10 @@ public class Program
     private static readonly string ProcessedFolder = Path.Combine(ProjectRoot, "processed");
     private static readonly string TessDataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tessdata");
 
-    // HuggingFace Inference Router endpoint using the OpenAI-compatible chat/completions API.
-    // The old api-inference.huggingface.co endpoint was retired (410 Gone); this is the replacement.
-    private static readonly string HfApiUrl =
-        "https://router.huggingface.co/hf-inference/models/mistralai/Mistral-7B-Instruct-v0.3/v1/chat/completions";
-
-    // Stores the HuggingFace API token entered by the user at startup.
-    // Get a free token at: https://huggingface.co/settings/tokens
-    private static string HfApiToken = "";
+    // Ollama runs locally — no API key needed.
+    // The "ollama" token value is a placeholder; Ollama ignores it but the header must exist.
+    private static readonly string OllamaUrl = "http://localhost:11434/v1/chat/completions";
+    private static readonly string OllamaToken = "ollama";
 
     // ─────────────────────────────────────────────────────────────────────────
     // ENTRY POINT
@@ -41,20 +38,9 @@ public class Program
     {
         Console.WriteLine("Curricell - Starting up");
 
-        // Prompt the user for their HuggingFace API token at startup.
-        // The token is used to authenticate requests to the HF Inference API.
-        Console.Write("Enter your HuggingFace API token: ");
-        string? input = Console.ReadLine()?.Trim();
-
-        // Exit early if no token was provided — the app cannot call the HF API without it.
-        if (string.IsNullOrEmpty(input))
-        {
-            Console.WriteLine("No API token provided - exiting");
-            return;
-        }
-
-        HfApiToken = input;
-        Console.WriteLine("API token set \n");
+        // Start the Ollama backend before anything else.
+        // If Ollama is already running this returns immediately.
+        EnsureOllamaRunning();
 
         // Set up the SQLite database and create tables if they don't already exist.
         InitializeDatabase();
@@ -78,6 +64,65 @@ public class Program
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // OLLAMA STARTUP
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Starts the Ollama backend service if it isn't already running.
+    // Called at startup before any API requests are made.
+    private static void EnsureOllamaRunning()
+    {
+        try
+        {
+            // Check if Ollama is already running by pinging its health endpoint.
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(3);
+            client.GetAsync("http://localhost:11434").GetAwaiter().GetResult();
+            Console.WriteLine("Ollama is already running.");
+            return;
+        }
+        catch
+        {
+            // Ollama is not running — start it as a background process.
+            Console.WriteLine("Starting Ollama...");
+        }
+
+        try
+        {
+            var process = new Process();
+            process.StartInfo.FileName = "ollama";
+            process.StartInfo.Arguments = "serve";
+
+            // Run in the background — don't open a new console window.
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.CreateNoWindow = true;
+            process.Start();
+
+            // Wait up to 10 seconds for Ollama to become ready.
+            for (int i = 0; i < 10; i++)
+            {
+                Thread.Sleep(1000);
+                Console.Write(".");
+                try
+                {
+                    using var client = new HttpClient();
+                    client.Timeout = TimeSpan.FromSeconds(2);
+                    client.GetAsync("http://localhost:11434").GetAwaiter().GetResult();
+                    Console.WriteLine("\nOllama started successfully.");
+                    return;
+                }
+                catch { }
+            }
+
+            Console.WriteLine("\nWarning: Ollama may not have started correctly.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Could not start Ollama: {ex.Message}");
+            Console.WriteLine("Please start Ollama manually by running 'ollama serve' in a terminal.");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // FOLDER HELPERS
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -96,7 +141,6 @@ public class Program
         Console.WriteLine($"DEBUG: Looking in {UploadFolder}");
         Console.WriteLine($"DEBUG: Folder exists = {Directory.Exists(UploadFolder)}");
 
-        // Get every file in the uploads/ folder regardless of extension.
         var allFiles = Directory.GetFiles(UploadFolder);
         Console.WriteLine($"DEBUG: Total files found = {allFiles.Length}");
         foreach (var f in allFiles)
@@ -116,7 +160,6 @@ public class Program
     }
 
     // Returns true if the file extension is one the app knows how to process.
-    // Only PDF and common image formats are supported.
     private static bool IsSupported(string path)
     {
         string ext = Path.GetExtension(path).ToLowerInvariant();
@@ -133,29 +176,19 @@ public class Program
     {
         var watcher = new FileSystemWatcher(UploadFolder)
         {
-            // Watch for new files being created and for file writes completing.
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
-
-            // Watch all file types — IsSupported() will filter out unsupported ones.
             Filter = "*.*",
-
-            // Activate the watcher immediately.
             EnableRaisingEvents = true,
-
-            // Do not recurse into sub-folders.
             IncludeSubdirectories = false
         };
 
         // This event fires whenever a new file is created inside uploads/.
         watcher.Created += (_, e) =>
         {
-            // Ignore files with unsupported extensions (e.g. .tmp, .docx).
             if (!IsSupported(e.FullPath)) return;
 
-            // Wait briefly to ensure the file has finished being written to disk
-            // before we try to open and read it.
+            // Wait briefly to ensure the file has finished being written to disk.
             Thread.Sleep(500);
-
             HandleFile(e.FullPath);
         };
 
@@ -167,7 +200,7 @@ public class Program
     // ─────────────────────────────────────────────────────────────────────────
 
     // Main processing pipeline for a single file.
-    // Steps: extract text → call HuggingFace API → insert into database → move to processed/
+    // Steps: extract text → chunk → call Ollama per chunk → merge → insert into DB → move to processed/
     private static void HandleFile(string filepath)
     {
         Console.WriteLine($"\nProcessing: {Path.GetFileName(filepath)}");
@@ -187,15 +220,13 @@ public class Program
 
             Console.WriteLine($"Extracted {rawText.Length} characters");
 
-            // Step 2: Send the extracted text to the HuggingFace API.
-            // The model parses the raw text and returns structured JSON
-            // containing topics and concepts ready for the database.
-            var parsed = ParseWithHuggingFace(rawText).GetAwaiter().GetResult();
+            // Step 2: Split the text into chunks and send each one to Ollama.
+            // Results from all chunks are merged into a single ParsedDataset.
+            var parsed = ParseInChunks(rawText).GetAwaiter().GetResult();
 
-            // If the API returned nothing useful, skip database insertion.
             if (parsed == null || (parsed.Topics.Count == 0 && parsed.Concepts.Count == 0))
             {
-                Console.WriteLine("HuggingFace returned no structured data - skipping");
+                Console.WriteLine("Ollama returned no structured data - skipping");
                 MoveToProcessed(filepath);
                 return;
             }
@@ -225,7 +256,6 @@ public class Program
         finally
         {
             // Always move the file to processed/ whether processing succeeded or failed.
-            // The guard inside MoveToProcessed prevents errors if the file was already moved.
             MoveToProcessed(filepath);
         }
     }
@@ -234,16 +264,13 @@ public class Program
     // If a file with the same name already exists in processed/, a timestamp is appended.
     private static void MoveToProcessed(string filepath)
     {
-        // Guard: if the file no longer exists (e.g. already moved in a previous call),
-        // do nothing. This prevents the "Could not find file" error from the finally block.
+        // Guard: if the file no longer exists (e.g. already moved), do nothing.
         if (!File.Exists(filepath)) return;
 
         try
         {
             string dest = Path.Combine(ProcessedFolder, Path.GetFileName(filepath));
 
-            // If a file with this name already exists in processed/, append a timestamp
-            // to avoid overwriting it. Example: myfile_20260311143022.pdf
             if (File.Exists(dest))
                 dest = Path.Combine(ProcessedFolder,
                     $"{Path.GetFileNameWithoutExtension(filepath)}_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(filepath)}");
@@ -270,38 +297,66 @@ public class Program
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // HUGGINGFACE API
+    // OLLAMA API — CHUNKED PROCESSING
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Sends the extracted text to the HuggingFace Mistral model and asks it to
-    // return a structured JSON object containing topics and concepts.
-    // Uses the OpenAI-compatible chat/completions format required by the new HF router.
-    private static async Task<ParsedDataset?> ParseWithHuggingFace(string rawText)
+    // Splits rawText into 1500-character chunks and calls Ollama once per chunk.
+    // Results from all chunks are merged into a single ParsedDataset.
+    // This handles documents of any length without hitting Ollama's context limit.
+    private static async Task<ParsedDataset> ParseInChunks(string rawText)
     {
-        if (string.IsNullOrEmpty(HfApiToken))
+        const int chunkSize = 1500;
+        var finalResult = new ParsedDataset();
+
+        // Split the full text into chunks of chunkSize characters.
+        var chunks = new List<string>();
+        for (int i = 0; i < rawText.Length; i += chunkSize)
+            chunks.Add(rawText.Substring(i, Math.Min(chunkSize, rawText.Length - i)));
+
+        Console.WriteLine($"Processing {chunks.Count} chunk(s)...");
+
+        for (int i = 0; i < chunks.Count; i++)
         {
-            Console.WriteLine("HF_API_TOKEN not set");
-            return null;
+            Console.WriteLine($"Chunk {i + 1}/{chunks.Count}");
+            var result = await ParseWithOllama(chunks[i]);
+
+            if (result == null) continue;
+
+            // Merge topics — skip duplicates by topic name.
+            foreach (var topic in result.Topics)
+            {
+                if (!finalResult.Topics.Any(t => t.Topic == topic.Topic))
+                    finalResult.Topics.Add(topic);
+            }
+
+            // Merge concepts — skip duplicates by concept name.
+            foreach (var concept in result.Concepts)
+            {
+                if (!finalResult.Concepts.Any(c => c.Name == concept.Name))
+                    finalResult.Concepts.Add(concept);
+            }
         }
 
-        // Truncate the text to 3000 characters to stay within the free-tier token limit.
-        // The model has a context window limit; sending too much text causes API errors.
-        string truncated = rawText.Length > 3000 ? rawText[..3000] : rawText;
+        return finalResult;
+    }
 
+    // Sends a single chunk of text to the Ollama API and returns structured topics/concepts.
+    // Uses the OpenAI-compatible chat/completions format that Ollama supports.
+    private static async Task<ParsedDataset?> ParseWithOllama(string chunkText)
+    {
         using var client = new HttpClient();
 
-        // Authenticate with the HuggingFace API using a Bearer token.
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {HfApiToken}");
+        // Authenticate — Ollama ignores this value but the header must be present.
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {OllamaToken}");
 
-        // Allow up to 2 minutes for a response — the free tier can be slow on cold starts.
-        client.Timeout = TimeSpan.FromSeconds(120);
+        // Allow up to 5 minutes — CPU inference is slow for larger chunks.
+        client.Timeout = TimeSpan.FromSeconds(300);
 
-        // Build the request payload in the OpenAI chat/completions format.
-        // "messages" contains a single user message with the extraction prompt.
+        // Build the request payload in OpenAI chat/completions format.
         // The prompt instructs the model to return ONLY a specific JSON structure.
         var payload = new
         {
-            model = "mistralai/Mistral-7B-Instruct-v0.3",
+            model = "llama3.2:1b",
             messages = new[]
             {
                 new
@@ -327,34 +382,31 @@ Rules:
 
 Text to extract from:
 ---
-{truncated}
+{chunkText}
 ---"
                 }
             },
-            max_tokens = 1024,   // Maximum number of tokens the model can generate in its response.
-            temperature = 0.1    // Low temperature = more deterministic output, better for structured data.
+            max_tokens = 4096,
+            temperature = 0.1
         };
 
-        // Serialize the payload to JSON and wrap it in an HTTP content object.
         string json = JsonSerializer.Serialize(payload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        Console.WriteLine("Calling HuggingFace API");
-        HttpResponseMessage response = await client.PostAsync(HfApiUrl, content);
+        Console.WriteLine("Calling Ollama API");
+        HttpResponseMessage response = await client.PostAsync(OllamaUrl, content);
 
-        // If the API returned an error status code, log it and return null.
         if (!response.IsSuccessStatusCode)
         {
             string err = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"HF API error {response.StatusCode}: {err}");
+            Console.WriteLine($"Ollama API error {response.StatusCode}: {err}");
             return null;
         }
 
         string responseBody = await response.Content.ReadAsStringAsync();
 
-        // Parse the OpenAI-compatible response format:
+        // Parse the OpenAI-compatible response:
         // { "choices": [ { "message": { "content": "..." } } ] }
-        // "content" holds the raw text the model generated — ideally a JSON object.
         using JsonDocument doc = JsonDocument.Parse(responseBody);
         string generatedText = doc.RootElement
             .GetProperty("choices")[0]
@@ -362,44 +414,69 @@ Text to extract from:
             .GetProperty("content")
             .GetString() ?? "";
 
-        Console.WriteLine($"HF response received ({generatedText.Length} chars)");
+        Console.WriteLine($"Ollama response received ({generatedText.Length} chars)");
 
-        // Extract and deserialize the JSON block from the model's text response.
         return ParseJsonResponse(generatedText);
     }
 
     // Extracts the JSON object from the model's raw text response and deserializes
-    // it into a ParsedDataset containing lists of TopicEntry and ConceptEntry objects.
+    // it into a ParsedDataset. Attempts to repair truncated JSON if deserialization fails.
     private static ParsedDataset? ParseJsonResponse(string text)
     {
-        // Find the boundaries of the JSON object in the response.
-        // The model may include extra text before or after the JSON, so we isolate it
-        // by finding the first '{' and the last '}'.
         int start = text.IndexOf('{');
         int end = text.LastIndexOf('}');
 
         if (start == -1 || end == -1 || end <= start)
         {
-            Console.WriteLine("Could not locate JSON in HF response");
+            Console.WriteLine("Could not locate JSON in Ollama response");
             return null;
         }
 
-        // Slice out just the JSON block.
         string jsonBlock = text[start..(end + 1)];
 
         try
         {
-            // Deserialize the JSON into our DTO classes.
-            // PropertyNameCaseInsensitive allows "topic" and "Topic" to both match.
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             return JsonSerializer.Deserialize<ParsedDataset>(jsonBlock, options);
         }
-        catch (Exception ex)
+        catch
         {
-            // Log the error and show the first 300 characters of the block for debugging.
-            Console.WriteLine($"JSON parse error: {ex.Message}");
-            Console.WriteLine($"Raw block: {jsonBlock[..Math.Min(300, jsonBlock.Length)]}");
-            return null;
+            // The JSON was likely truncated mid-response. Attempt to repair it
+            // by finding the last complete entry and closing any open brackets.
+            Console.WriteLine("JSON truncated — attempting repair...");
+            try
+            {
+                int lastCompleteEntry = jsonBlock.LastIndexOf("},");
+                if (lastCompleteEntry == -1)
+                    lastCompleteEntry = jsonBlock.LastIndexOf('}');
+
+                if (lastCompleteEntry == -1)
+                {
+                    Console.WriteLine("Could not repair JSON.");
+                    return null;
+                }
+
+                string partial = jsonBlock[..(lastCompleteEntry + 1)];
+
+                // Count unclosed brackets and close them.
+                int openBrackets = partial.Count(c => c == '[') - partial.Count(c => c == ']');
+                int openBraces   = partial.Count(c => c == '{') - partial.Count(c => c == '}');
+
+                string repaired = partial
+                    + new string(']', openBrackets)
+                    + new string('}', openBraces);
+
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var result = JsonSerializer.Deserialize<ParsedDataset>(repaired, options);
+                Console.WriteLine("JSON repaired successfully.");
+                return result;
+            }
+            catch (Exception repairEx)
+            {
+                Console.WriteLine($"JSON repair failed: {repairEx.Message}");
+                Console.WriteLine($"Raw block: {jsonBlock[..Math.Min(300, jsonBlock.Length)]}");
+                return null;
+            }
         }
     }
 
@@ -453,7 +530,7 @@ Text to extract from:
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Upsert Concept error: {ex.Message}");
+            Console.WriteLine($"Upsert concept error: {ex.Message}");
         }
     }
 
@@ -462,11 +539,9 @@ Text to extract from:
     // ─────────────────────────────────────────────────────────────────────────
 
     // Creates the Concepts and topics tables if they don't already exist.
-    // UNIQUE constraints on Name and Topic are required for the upsert ON CONFLICT clause to work.
+    // UNIQUE constraints on Name and Topic are required for ON CONFLICT upserts to work.
     public static void InitializeDatabase()
     {
-        // Concepts table: stores individual concepts linked to a parent topic.
-        // Name must be unique so we can upsert without creating duplicates.
         string createConceptsTable = @"CREATE TABLE IF NOT EXISTS Concepts(
             Id INTEGER PRIMARY KEY AUTOINCREMENT, 
             Concept VARCHAR,
@@ -474,8 +549,6 @@ Text to extract from:
             Description TEXT
         )";
 
-        // Topics table: stores high-level subject categories.
-        // Topic must be unique so we can upsert without creating duplicates.
         string createTopicsTable = @"CREATE TABLE IF NOT EXISTS topics(
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
             Topic VARCHAR UNIQUE,
@@ -596,7 +669,6 @@ Text to extract from:
             {
                 while (reader.Read())
                 {
-                    // IsDBNull checks prevent exceptions when a column value is NULL.
                     topics.Add((
                         reader.GetInt32(0),
                         reader.IsDBNull(1) ? "" : reader.GetString(1),
@@ -636,7 +708,6 @@ Text to extract from:
     }
 
     // Returns all concepts that belong to a specific topic/category.
-    // Useful for fetching everything under e.g. "Photosynthesis".
     public static List<(int Id, string Name, string Description)> GetConceptsByConcept(string concept)
     {
         var concepts = new List<(int, string, string)>();
@@ -666,7 +737,6 @@ Text to extract from:
     }
 
     // Searches concepts by name using a partial match (LIKE %searchTerm%).
-    // For example, searching "photo" would match "Photosynthesis".
     public static List<(int Id, string Concept, string Name, string Description)> SearchConcepts(string searchTerm)
     {
         var concepts = new List<(int, string, string, string)>();
@@ -758,7 +828,6 @@ Text to extract from:
     // ─────────────────────────────────────────────────────────────────────────
 
     // Updates an existing topic's name and description by ID.
-    // Returns true if a row was affected, false if the ID was not found.
     public static bool UpdateTopic(int id, string topic, string description)
     {
         string updateSql = "UPDATE topics SET Topic = @Topic, Description = @Description WHERE Id = @Id";
@@ -785,7 +854,6 @@ Text to extract from:
     }
 
     // Updates an existing concept's fields by ID.
-    // Returns true if a row was affected, false if the ID was not found.
     public static bool UpdateConcept(int id, string concept, string name, string description)
     {
         string updateSql = "UPDATE Concepts SET Concept = @Concept, Name = @Name, Description = @Description WHERE Id = @Id";
@@ -817,7 +885,6 @@ Text to extract from:
     // ─────────────────────────────────────────────────────────────────────────
 
     // Deletes a topic by its database ID.
-    // Returns true if a row was deleted, false if the ID was not found.
     public static bool DeleteTopic(int id)
     {
         string deleteSql = "DELETE FROM topics WHERE Id = @Id";
@@ -841,7 +908,6 @@ Text to extract from:
     }
 
     // Deletes a concept by its database ID.
-    // Returns true if a row was deleted, false if the ID was not found.
     public static bool DeleteConcept(int id)
     {
         string deleteSql = "DELETE FROM Concepts WHERE Id = @Id";
@@ -870,7 +936,6 @@ Text to extract from:
     // ─────────────────────────────────────────────────────────────────────────
 
     // Prints all topics to the console in a readable format.
-    // Useful for debugging or verifying database contents after a file is processed.
     public static void DisplayAllTopics()
     {
         var topics = GetAllTopics();
@@ -881,7 +946,6 @@ Text to extract from:
     }
 
     // Prints all concepts to the console in a readable format.
-    // Each line shows the concept's ID, name, parent topic, and description.
     public static void DisplayAllConcepts()
     {
         var concepts = GetAllConcepts();
@@ -896,10 +960,8 @@ Text to extract from:
     // ─────────────────────────────────────────────────────────────────────────
 
     // Extracts text from an image file using OpenCV preprocessing + Tesseract OCR.
-    // The preprocessing pipeline improves OCR accuracy on low-contrast or inverted images.
-    public static string ExtractImgText(string imagePath)
+    private static string ExtractImgText(string imagePath)
     {
-        // Tesseract requires a file path, so we write the processed image to a temp file.
         string tempPath = Path.Combine(Path.GetTempPath(), "curricel_temp.png");
 
         try
@@ -913,29 +975,24 @@ Text to extract from:
                 // Step 1: Convert to grayscale — OCR works on single-channel images.
                 Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
 
-                // Step 2: Invert the image — converts dark-on-black to light-on-white,
-                // which is the format Tesseract expects for best results.
+                // Step 2: Invert — converts dark-on-black to light-on-white for Tesseract.
                 Cv2.BitwiseNot(gray, inverted);
 
-                // Step 3: Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-                // to boost local contrast and make text stand out from the background.
+                // Step 3: CLAHE boosts local contrast to make text stand out.
                 var clahe = Cv2.CreateCLAHE(clipLimit: 4.0, tileGridSize: new Size(8, 8));
                 clahe.Apply(inverted, contrast);
 
-                // Step 4: Adaptive threshold converts the image to pure black and white.
-                // Gaussian mode handles uneven lighting across the image.
-                // blockSize controls the neighbourhood size; c is a constant subtracted from the mean.
+                // Step 4: Adaptive threshold converts to pure black and white.
                 Cv2.AdaptiveThreshold(contrast, thresh, 255,
                     AdaptiveThresholdTypes.GaussianC,
                     ThresholdTypes.Binary,
                     blockSize: 31,
                     c: -10);
 
-                // Step 5: Save the preprocessed image to disk so Tesseract can read it.
+                // Step 5: Save the preprocessed image for Tesseract to read.
                 Cv2.ImWrite(tempPath, thresh);
             }
 
-            // Run Tesseract on the preprocessed image to extract the text.
             using (var engine = new TesseractEngine(TessDataPath, "eng", EngineMode.Default))
             using (var img = Pix.LoadFromFile(tempPath))
             using (var page = engine.Process(img))
@@ -952,7 +1009,6 @@ Text to extract from:
         }
         finally
         {
-            // Always delete the temp file, even if an exception was thrown above.
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }
@@ -962,16 +1018,13 @@ Text to extract from:
     // PDF TEXT EXTRACTION
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Extracts text directly from a PDF file using PdfPig.
-    // This reads the embedded text layer — no OCR needed for standard PDFs.
-    // Note: scanned PDFs (image-only) will return empty text; use ExtractImgText for those.
+    // Extracts text directly from a PDF using PdfPig (no OCR needed for standard PDFs).
+    // Note: scanned/image-only PDFs will return empty text.
     public static string ExtractPdfText(string filePath)
     {
         if (filePath.EndsWith(".pdf"))
         {
             using var pdf = PdfDocument.Open(filePath);
-
-            // Concatenate the text from every page, separated by newlines.
             return string.Join("\n", pdf.GetPages().Select(p => p.Text));
         }
 
@@ -981,18 +1034,17 @@ Text to extract from:
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA TRANSFER OBJECTS (DTOs)
-// These classes mirror the JSON structure returned by the HuggingFace model.
+// These classes mirror the JSON structure returned by the Ollama model.
 // JsonSerializer maps the JSON fields to these properties automatically.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Top-level container that holds the full parsed response from the model.
+// Top-level container holding the full parsed response from the model.
 public class ParsedDataset
 {
     public List<TopicEntry> Topics { get; set; } = new();
     public List<ConceptEntry> Concepts { get; set; } = new();
 }
 
-// Represents one entry in the "topics" array from the model's JSON response.
 // Maps to: { "topic": "...", "description": "..." }
 public class TopicEntry
 {
@@ -1000,9 +1052,8 @@ public class TopicEntry
     public string Description { get; set; } = "";
 }
 
-// Represents one entry in the "concepts" array from the model's JSON response.
 // Maps to: { "concept": "...", "name": "...", "description": "..." }
-// "Concept" here is the name of the parent topic this concept belongs to.
+// "Concept" is the name of the parent topic this concept belongs to.
 public class ConceptEntry
 {
     public string Concept { get; set; } = "";
